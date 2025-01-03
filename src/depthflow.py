@@ -2,17 +2,25 @@ import logging
 import moderngl
 import os
 
-# Set required environment variables for GPU acceleration
-os.environ["NVIDIA_VISIBLE_DEVICES"] = "all"
-os.environ["NVIDIA_DRIVER_CAPABILITIES"] = "all"
-os.environ["__GLX_VENDOR_LIBRARY_NAME"] = "nvidia"
-os.environ["PYOPENGL_PLATFORM"] = "egl"
-os.environ["__EGL_VENDOR_LIBRARY_FILENAMES"] = "/usr/share/glvnd/egl_vendor.d/10_nvidia.json"
-# Point directly to the NVIDIA libraries we found
-os.environ["LD_LIBRARY_PATH"] = "/usr/lib/x86_64-linux-gnu"
-os.environ["LIBGL_DRIVERS_PATH"] = "/usr/lib/x86_64-linux-gnu/dri"
+# GPU Acceleration Environment Variables
+gpu_env_vars = {
+    "NVIDIA_VISIBLE_DEVICES": "all",
+    "NVIDIA_DRIVER_CAPABILITIES": "all",
+    "__GLX_VENDOR_LIBRARY_NAME": "nvidia",
+    "PYOPENGL_PLATFORM": "egl",
+    "__EGL_VENDOR_LIBRARY_FILENAMES": "/usr/share/glvnd/egl_vendor.d/10_nvidia.json",
+    "LD_LIBRARY_PATH": "/usr/lib/x86_64-linux-gnu",
+    "LIBGL_DRIVERS_PATH": "/usr/lib/x86_64-linux-gnu/dri",
+    "CUDA_VISIBLE_DEVICES": "0",
+    "WINDOW_BACKEND": "headless"
+}
 
+# Set environment variables if not already set
+for key, value in gpu_env_vars.items():
+    if key not in os.environ:
+        os.environ[key] = value
 
+# Rest of your imports
 import torch
 from DepthFlow import DepthScene
 from Broken.Loaders import LoaderImage
@@ -29,6 +37,51 @@ try:
     import importlib.metadata as importlib_metadata
 except ImportError:
     import importlib_metadata
+
+
+def check_compatibility():
+    try:
+        import pkg_resources
+        
+        required_packages = {
+            'torch': '>=2.0.0',
+            'moderngl': '>=5.6.0',
+            'numpy': '>=1.19.0',
+            'shaderflow': '>=0.1.0'
+        }
+        
+        for package, version in required_packages.items():
+            try:
+                pkg_resources.require(f"{package}{version}")
+                logger.debug(f"✅ {package} version check passed")
+            except pkg_resources.VersionConflict as e:
+                logger.warning(f"⚠️ Version conflict for {package}: {e}")
+            except pkg_resources.DistributionNotFound:
+                logger.error(f"❌ {package} not found")
+    except Exception as e:
+        logger.error(f"Failed to check package compatibility: {e}")
+
+# Call compatibility check
+check_compatibility()
+def create_gl_context():
+    backends = ['egl', 'osmesa']
+    errors = {}
+    
+    for backend in backends:
+        try:
+            os.environ["PYOPENGL_PLATFORM"] = backend
+            ctx = moderngl.create_standalone_context(backend=backend)
+            logger.info(f"Successfully created {backend.upper()} context")
+            logger.info(f"OpenGL Version: {ctx.version_code}")
+            logger.info(f"Vendor: {ctx.vendor}")
+            logger.info(f"Renderer: {ctx.renderer}")
+            return ctx, backend
+        except Exception as e:
+            errors[backend] = str(e)
+            continue
+    
+    error_msg = "\n".join([f"{b.upper()}: {e}" for b, e in errors.items()])
+    raise RuntimeError(f"Failed to create OpenGL context with any backend:\n{error_msg}")
 
 # Parse requirements.txt to extract depthflow version
 def extract_depthflow_version():
@@ -76,29 +129,17 @@ class CustomDepthflowScene(DepthScene):
         **kwargs,
     ):
         logger.debug("Environment variables:")
-        for var in ['PYOPENGL_PLATFORM', 'NVIDIA_VISIBLE_DEVICES', '__GLX_VENDOR_LIBRARY_NAME', 'LD_LIBRARY_PATH']:
+        for var in gpu_env_vars.keys():
             logger.debug(f"{var}: {os.environ.get(var, 'Not set')}")
 
         try:
-            # Try to create EGL context with specific device
-            ctx = moderngl.create_standalone_context(backend='egl')
-            logger.debug(f"Successfully created EGL context")
-            logger.debug(f"OpenGL Version: {ctx.version_code}")
-            logger.debug(f"Vendor: {ctx.vendor}")
-            logger.debug(f"Renderer: {ctx.renderer}")
+            # Create OpenGL context using our helper
+            ctx, backend = create_gl_context()
+            logger.debug(f"Successfully created {backend.upper()} context")
             ctx.release()
         except Exception as e:
-            logger.error(f"Failed to create EGL context: {e}")
-            # If EGL fails, try OSMesa as fallback
-            try:
-                logger.debug("Attempting OSMesa fallback...")
-                os.environ["PYOPENGL_PLATFORM"] = "osmesa"
-                ctx = moderngl.create_standalone_context(backend='osmesa')
-                logger.debug("Successfully created OSMesa context")
-                ctx.release()
-            except Exception as e2:
-                logger.error(f"OSMesa fallback also failed: {e2}")
-                raise RuntimeError(f"Failed to create OpenGL context with any backend. EGL error: {e}, OSMesa error: {e2}")
+            logger.error(f"Failed to create OpenGL context: {e}")
+            raise
 
         # Initialize scene with successful backend
         scene_kwargs = {
@@ -115,8 +156,7 @@ class CustomDepthflowScene(DepthScene):
             logger.exception("Full traceback:")
             raise
 
-
- 
+    
         # Rest of your initialization code...
         self.frames = deque()
         self.progress_callback = progress_callback
@@ -331,7 +371,23 @@ class Depthflow:
 
     def end_progress(self):
         self.progress_bar = None
+    def verify_cuda_setup(self):
+        try:
+            cuda_available = torch.cuda.is_available()
+            if not cuda_available:
+                logger.warning("CUDA is not available. GPU acceleration will be disabled.")
+                return False
+            
+            logger.info(f"CUDA Available: {cuda_available}")
+            logger.info(f"CUDA Version: {torch.version.cuda}")
+            logger.info(f"Current Device: {torch.cuda.current_device()}")
+            logger.info(f"Device Name: {torch.cuda.get_device_name()}")
+            return True
+        except Exception as e:
+            logger.error(f"Error checking CUDA setup: {e}")
+            return False
 
+    # ... rest of your existing code ...
     def apply_depthflow(
         self,
         image,
