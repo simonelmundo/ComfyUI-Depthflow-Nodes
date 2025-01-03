@@ -5,15 +5,14 @@ import os
 # Set required environment variables for GPU acceleration
 os.environ["NVIDIA_VISIBLE_DEVICES"] = "all"
 os.environ["NVIDIA_DRIVER_CAPABILITIES"] = "all"
-os.environ["WINDOW_BACKEND"] = "headless"
-os.environ["PYOPENGL_PLATFORM"] = "egl"
 os.environ["__GLX_VENDOR_LIBRARY_NAME"] = "nvidia"
+os.environ["PYOPENGL_PLATFORM"] = "egl"
 os.environ["__EGL_VENDOR_LIBRARY_FILENAMES"] = "/usr/share/glvnd/egl_vendor.d/10_nvidia.json"
+# Point directly to the NVIDIA libraries we found
+os.environ["LD_LIBRARY_PATH"] = "/usr/lib/x86_64-linux-gnu"
+os.environ["LIBGL_DRIVERS_PATH"] = "/usr/lib/x86_64-linux-gnu/dri"
 
-# Add this to help with debugging
-os.environ["LIBGL_DEBUG"] = "verbose"
 
-# Rest of your existing imports...
 import torch
 from DepthFlow import DepthScene
 from Broken.Loaders import LoaderImage
@@ -64,7 +63,6 @@ if expected_version != version:
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger('depthflow')
 
-
 class CustomDepthflowScene(DepthScene):
     def __init__(
         self,
@@ -78,34 +76,33 @@ class CustomDepthflowScene(DepthScene):
         **kwargs,
     ):
         logger.debug("Environment variables:")
-        for var in ['PYOPENGL_PLATFORM', 'NVIDIA_VISIBLE_DEVICES', '__GLX_VENDOR_LIBRARY_NAME']:
+        for var in ['PYOPENGL_PLATFORM', 'NVIDIA_VISIBLE_DEVICES', '__GLX_VENDOR_LIBRARY_NAME', 'LD_LIBRARY_PATH']:
             logger.debug(f"{var}: {os.environ.get(var, 'Not set')}")
 
-        # Try different backends in order of preference
-        backends = ['egl', 'osmesa']
-        ctx = None
-        
-        for backend in backends:
+        try:
+            # Try to create EGL context with specific device
+            ctx = moderngl.create_standalone_context(backend='egl')
+            logger.debug(f"Successfully created EGL context")
+            logger.debug(f"OpenGL Version: {ctx.version_code}")
+            logger.debug(f"Vendor: {ctx.vendor}")
+            logger.debug(f"Renderer: {ctx.renderer}")
+            ctx.release()
+        except Exception as e:
+            logger.error(f"Failed to create EGL context: {e}")
+            # If EGL fails, try OSMesa as fallback
             try:
-                logger.debug(f"Attempting to create ModernGL context with backend: {backend}")
-                ctx = moderngl.create_standalone_context(backend=backend)
-                logger.debug(f"Successfully created context with {backend}")
-                logger.debug(f"OpenGL Version: {ctx.version_code}")
-                logger.debug(f"Vendor: {ctx.vendor}")
-                logger.debug(f"Renderer: {ctx.renderer}")
+                logger.debug("Attempting OSMesa fallback...")
+                os.environ["PYOPENGL_PLATFORM"] = "osmesa"
+                ctx = moderngl.create_standalone_context(backend='osmesa')
+                logger.debug("Successfully created OSMesa context")
                 ctx.release()
-                os.environ['MODERNGL_BACKEND'] = backend  # Remember successful backend
-                break
-            except Exception as e:
-                logger.debug(f"Failed to create context with {backend}: {e}")
-                continue
-
-        if ctx is None:
-            raise RuntimeError("Failed to create OpenGL context with any available backend")
+            except Exception as e2:
+                logger.error(f"OSMesa fallback also failed: {e2}")
+                raise RuntimeError(f"Failed to create OpenGL context with any backend. EGL error: {e}, OSMesa error: {e2}")
 
         # Initialize scene with successful backend
         scene_kwargs = {
-            "backend": os.environ['MODERNGL_BACKEND'],
+            "backend": os.environ["PYOPENGL_PLATFORM"],
             "state": state,
             "effects": effects
         }
@@ -117,6 +114,7 @@ class CustomDepthflowScene(DepthScene):
             logger.error(f"Failed to initialize DepthScene: {e}")
             logger.exception("Full traceback:")
             raise
+
 
  
         # Rest of your initialization code...
