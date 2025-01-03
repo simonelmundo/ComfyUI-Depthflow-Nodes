@@ -58,6 +58,14 @@ if expected_version != version:
     subprocess.run([sys.executable, "-m", "pip", "install", f"depthflow=={expected_version}"])
 
 
+import logging
+import moderngl
+import os
+
+# Set up logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger('depthflow')
+
 class CustomDepthflowScene(DepthScene):
     def __init__(
         self,
@@ -70,10 +78,36 @@ class CustomDepthflowScene(DepthScene):
         animation_speed=1.0,
         **kwargs,
     ):
+        # Log environment variables
+        logger.debug("Environment variables:")
+        for var in ['PYOPENGL_PLATFORM', 'NVIDIA_VISIBLE_DEVICES', '__GLX_VENDOR_LIBRARY_NAME', 'LIBGL_DEBUG']:
+            logger.debug(f"{var}: {os.environ.get(var, 'Not set')}")
+
+        # Test OpenGL context creation
+        logger.debug("Attempting to create ModernGL context...")
+        try:
+            ctx = moderngl.create_standalone_context(backend='egl')
+            logger.debug(f"ModernGL context created successfully. Version: {ctx.version_code}")
+            logger.debug(f"Vendor: {ctx.vendor}")
+            logger.debug(f"Renderer: {ctx.renderer}")
+            ctx.release()
+        except Exception as e:
+            logger.error(f"Failed to create ModernGL context: {e}")
+            logger.error(f"ModernGL info: {moderngl.info()}")
+
         # Only pass backend parameter to DepthScene
         scene_kwargs = {"backend": "headless"}
+        logger.debug(f"Initializing DepthScene with kwargs: {scene_kwargs}")
         
-        DepthScene.__init__(self, **scene_kwargs)
+        try:
+            DepthScene.__init__(self, **scene_kwargs)
+            logger.debug("DepthScene initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize DepthScene: {e}")
+            logger.exception("Full traceback:")
+            raise
+
+        # Rest of your initialization code...
         self.frames = deque()
         self.progress_callback = progress_callback
         self.custom_animation_frames = deque()
@@ -303,19 +337,28 @@ class Depthflow:
         tiling_mode,
         effects=None,
     ):
+        logger.debug("Starting apply_depthflow")
+        logger.debug(f"Input parameters: fps={input_fps}, frames={num_frames}, quality={quality}")
+        
         state = {"invert": invert, "tiling_mode": tiling_mode}
-        scene = CustomDepthflowScene(
-            state=state,
-            effects=effects,
-            progress_callback=self.update_progress,
-            num_frames=num_frames,
-            input_fps=input_fps,
-            output_fps=output_fps,
-            animation_speed=animation_speed,
-            backend="headless"  # Remove device parameter
-        )
-    # Rest of your existing method...
-        # Convert image and depthmap to numpy arrays
+        logger.debug(f"Creating scene with state: {state}")
+        
+        try:
+            scene = CustomDepthflowScene(
+                state=state,
+                effects=effects,
+                progress_callback=self.update_progress,
+                num_frames=num_frames,
+                input_fps=input_fps,
+                output_fps=output_fps,
+                animation_speed=animation_speed,
+                backend="headless"
+            )
+            logger.debug("Scene created successfully")
+        except Exception as e:
+            logger.error(f"Failed to create scene: {e}")
+            logger.exception("Full traceback:")
+            raise
         if image.is_cuda:
             image = image.cpu().numpy()
         else:
