@@ -77,52 +77,48 @@ class CustomDepthflowScene(DepthScene):
         animation_speed=1.0,
         **kwargs,
     ):
-        # Log environment variables
-        logger.debug("BRUH  Environment variables:")
-        for var in ['PYOPENGL_PLATFORM', 'NVIDIA_VISIBLE_DEVICES', '__GLX_VENDOR_LIBRARY_NAME', 'LIBGL_DEBUG']:
-            logger.debug(f"BRUH {var}: {os.environ.get(var, 'Not set')}")
+        logger.debug("Environment variables:")
+        for var in ['PYOPENGL_PLATFORM', 'NVIDIA_VISIBLE_DEVICES', '__GLX_VENDOR_LIBRARY_NAME']:
+            logger.debug(f"{var}: {os.environ.get(var, 'Not set')}")
 
-        # Test OpenGL context creation
-        logger.debug("BRUH  Attempting to create ModernGL context...")
-        try:
-            ctx = moderngl.create_standalone_context(backend='egl')
-            logger.debug(f"BRUH ModernGL context created successfully. Version: {ctx.version_code}")
-            logger.debug(f"BRUH Vendor: {ctx.vendor}")
-            logger.debug(f"BRUH Renderer: {ctx.renderer}")
-            ctx.release()
-        except Exception as e:
-            logger.error(f"Failed to create ModernGL context: {e}")
-            # Get available devices
+        # Try different backends in order of preference
+        backends = ['egl', 'osmesa']
+        ctx = None
+        
+        for backend in backends:
             try:
-                import pynvml
-                pynvml.nvmlInit()
-                device_count = pynvml.nvmlDeviceGetCount()
-                logger.debug(f"BRUH NVIDIA devices found: {device_count}")
-                for i in range(device_count):
-                    handle = pynvml.nvmlDeviceGetHandleByIndex(i)
-                    name = pynvml.nvmlDeviceGetName(handle)
-                    logger.debug(f"BRUH Device {i}: {name}")
-            except Exception as nvml_error:
-                logger.error(f"Failed to query NVIDIA devices: {nvml_error}")
-            raise RuntimeError(f"Failed to initialize OpenGL context: {e}")
+                logger.debug(f"Attempting to create ModernGL context with backend: {backend}")
+                ctx = moderngl.create_standalone_context(backend=backend)
+                logger.debug(f"Successfully created context with {backend}")
+                logger.debug(f"OpenGL Version: {ctx.version_code}")
+                logger.debug(f"Vendor: {ctx.vendor}")
+                logger.debug(f"Renderer: {ctx.renderer}")
+                ctx.release()
+                os.environ['MODERNGL_BACKEND'] = backend  # Remember successful backend
+                break
+            except Exception as e:
+                logger.debug(f"Failed to create context with {backend}: {e}")
+                continue
 
-        # Only pass required parameters to DepthScene
+        if ctx is None:
+            raise RuntimeError("Failed to create OpenGL context with any available backend")
+
+        # Initialize scene with successful backend
         scene_kwargs = {
-            "backend": "headless",
+            "backend": os.environ['MODERNGL_BACKEND'],
             "state": state,
             "effects": effects
         }
-        logger.debug(f"BRUH Initializing DepthScene with kwargs: {scene_kwargs}")
         
         try:
             super().__init__(**scene_kwargs)
-            logger.debug("BRUH  DepthScene initialized successfully")
+            logger.debug("DepthScene initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize DepthScene: {e}")
             logger.exception("Full traceback:")
             raise
 
-
+ 
         # Rest of your initialization code...
         self.frames = deque()
         self.progress_callback = progress_callback
@@ -372,7 +368,7 @@ class Depthflow:
             )
             logger.debug("BRUH  Scene created successfully")
         except Exception as e:
-            logger.error(f"Failed to create scene: {e}")
+            logger.debug(f"BRUH  Failed to create scene: {e}")
             logger.exception("Full traceback:")
             raise
         if image.is_cuda:
