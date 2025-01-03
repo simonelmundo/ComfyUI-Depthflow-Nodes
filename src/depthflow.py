@@ -6,6 +6,7 @@ os.environ["NVIDIA_DRIVER_CAPABILITIES"] = "all"
 os.environ["WINDOW_BACKEND"] = "headless"
 os.environ["PYOPENGL_PLATFORM"] = "egl"
 os.environ["__GLX_VENDOR_LIBRARY_NAME"] = "nvidia"
+os.environ["__EGL_VENDOR_LIBRARY_FILENAMES"] = "/usr/share/glvnd/egl_vendor.d/10_nvidia.json"
 
 # Rest of your existing imports...
 import torch
@@ -66,20 +67,16 @@ class CustomDepthflowScene(DepthScene):
         animation_speed=1.0,
         **kwargs,
     ):
-        # Force EGL backend and GPU device
-        kwargs["backend"] = "headless"
-        if torch.cuda.is_available():
-            kwargs["device"] = "cuda"
-            
-        DepthScene.__init__(self, **kwargs)
+        # Only pass backend parameter to DepthScene
+        scene_kwargs = {"backend": "headless"}
+        
+        DepthScene.__init__(self, **scene_kwargs)
         self.frames = deque()
         self.progress_callback = progress_callback
         self.custom_animation_frames = deque()
         self._set_effects(effects)
-        # Override state with keywords in state
         self.override_state = state
         self.time = 0.00001
-        # Initialize images and depth_maps
         self.images = None
         self.depth_maps = None
         self.input_fps = input_fps
@@ -312,8 +309,7 @@ class Depthflow:
             input_fps=input_fps,
             output_fps=output_fps,
             animation_speed=animation_speed,
-            backend="headless",
-            device="cuda" if torch.cuda.is_available() else "cpu"
+            backend="headless"  # Remove device parameter
         )
     # Rest of your existing method...
         # Convert image and depthmap to numpy arrays
