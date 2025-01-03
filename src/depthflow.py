@@ -1,5 +1,16 @@
+import os
+
+# Set required environment variables for GPU acceleration
+os.environ["NVIDIA_VISIBLE_DEVICES"] = "all"
+os.environ["NVIDIA_DRIVER_CAPABILITIES"] = "all"
+os.environ["WINDOW_BACKEND"] = "headless"
+os.environ["PYOPENGL_PLATFORM"] = "egl"
+os.environ["__GLX_VENDOR_LIBRARY_NAME"] = "nvidia"
+
+# Rest of your existing imports...
 import torch
 from DepthFlow import DepthScene
+
 from Broken.Loaders import LoaderImage
 from ShaderFlow.Texture import ShaderTexture
 import numpy as np
@@ -44,7 +55,6 @@ if expected_version != version:
 
 
 class CustomDepthflowScene(DepthScene):
-
     def __init__(
         self,
         state=None,
@@ -56,6 +66,11 @@ class CustomDepthflowScene(DepthScene):
         animation_speed=1.0,
         **kwargs,
     ):
+        # Force EGL backend and GPU device
+        kwargs["backend"] = "headless"
+        if torch.cuda.is_available():
+            kwargs["device"] = "cuda"
+            
         DepthScene.__init__(self, **kwargs)
         self.frames = deque()
         self.progress_callback = progress_callback
@@ -288,7 +303,6 @@ class Depthflow:
         tiling_mode,
         effects=None,
     ):
-        # Create the scene
         state = {"invert": invert, "tiling_mode": tiling_mode}
         scene = CustomDepthflowScene(
             state=state,
@@ -299,8 +313,9 @@ class Depthflow:
             output_fps=output_fps,
             animation_speed=animation_speed,
             backend="headless",
+            device="cuda" if torch.cuda.is_available() else "cpu"
         )
-
+    # Rest of your existing method...
         # Convert image and depthmap to numpy arrays
         if image.is_cuda:
             image = image.cpu().numpy()
