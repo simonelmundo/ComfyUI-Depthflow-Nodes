@@ -1,3 +1,5 @@
+import logging
+import moderngl
 import os
 
 # Set required environment variables for GPU acceleration
@@ -14,7 +16,6 @@ os.environ["LIBGL_DEBUG"] = "verbose"
 # Rest of your existing imports...
 import torch
 from DepthFlow import DepthScene
-
 from Broken.Loaders import LoaderImage
 from ShaderFlow.Texture import ShaderTexture
 import numpy as np
@@ -58,13 +59,11 @@ if expected_version != version:
     subprocess.run([sys.executable, "-m", "pip", "install", f"depthflow=={expected_version}"])
 
 
-import logging
-import moderngl
-import os
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger('depthflow')
+
 
 class CustomDepthflowScene(DepthScene):
     def __init__(
@@ -93,19 +92,36 @@ class CustomDepthflowScene(DepthScene):
             ctx.release()
         except Exception as e:
             logger.error(f"Failed to create ModernGL context: {e}")
-            logger.error(f"ModernGL info: {moderngl.info()}")
+            # Get available devices
+            try:
+                import pynvml
+                pynvml.nvmlInit()
+                device_count = pynvml.nvmlDeviceGetCount()
+                logger.debug(f"NVIDIA devices found: {device_count}")
+                for i in range(device_count):
+                    handle = pynvml.nvmlDeviceGetHandleByIndex(i)
+                    name = pynvml.nvmlDeviceGetName(handle)
+                    logger.debug(f"Device {i}: {name}")
+            except Exception as nvml_error:
+                logger.error(f"Failed to query NVIDIA devices: {nvml_error}")
+            raise RuntimeError(f"Failed to initialize OpenGL context: {e}")
 
-        # Only pass backend parameter to DepthScene
-        scene_kwargs = {"backend": "headless"}
+        # Only pass required parameters to DepthScene
+        scene_kwargs = {
+            "backend": "headless",
+            "state": state,
+            "effects": effects
+        }
         logger.debug(f"Initializing DepthScene with kwargs: {scene_kwargs}")
         
         try:
-            DepthScene.__init__(self, **scene_kwargs)
+            super().__init__(**scene_kwargs)
             logger.debug("DepthScene initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize DepthScene: {e}")
             logger.exception("Full traceback:")
             raise
+
 
         # Rest of your initialization code...
         self.frames = deque()
