@@ -8,6 +8,9 @@ os.environ["PYOPENGL_PLATFORM"] = "egl"
 os.environ["__GLX_VENDOR_LIBRARY_NAME"] = "nvidia"
 os.environ["__EGL_VENDOR_LIBRARY_FILENAMES"] = "/usr/share/glvnd/egl_vendor.d/10_nvidia.json"
 
+# Add this to help with debugging
+os.environ["LIBGL_DEBUG"] = "verbose"
+
 # Rest of your existing imports...
 import torch
 from DepthFlow import DepthScene
