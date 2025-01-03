@@ -78,17 +78,17 @@ class CustomDepthflowScene(DepthScene):
         **kwargs,
     ):
         # Log environment variables
-        logger.debug("Environment variables:")
+        logger.debug("BRUH  Environment variables:")
         for var in ['PYOPENGL_PLATFORM', 'NVIDIA_VISIBLE_DEVICES', '__GLX_VENDOR_LIBRARY_NAME', 'LIBGL_DEBUG']:
-            logger.debug(f"{var}: {os.environ.get(var, 'Not set')}")
+            logger.debug(f"BRUH {var}: {os.environ.get(var, 'Not set')}")
 
         # Test OpenGL context creation
-        logger.debug("Attempting to create ModernGL context...")
+        logger.debug("BRUH  Attempting to create ModernGL context...")
         try:
             ctx = moderngl.create_standalone_context(backend='egl')
-            logger.debug(f"ModernGL context created successfully. Version: {ctx.version_code}")
-            logger.debug(f"Vendor: {ctx.vendor}")
-            logger.debug(f"Renderer: {ctx.renderer}")
+            logger.debug(f"BRUH ModernGL context created successfully. Version: {ctx.version_code}")
+            logger.debug(f"BRUH Vendor: {ctx.vendor}")
+            logger.debug(f"BRUH Renderer: {ctx.renderer}")
             ctx.release()
         except Exception as e:
             logger.error(f"Failed to create ModernGL context: {e}")
@@ -97,11 +97,11 @@ class CustomDepthflowScene(DepthScene):
                 import pynvml
                 pynvml.nvmlInit()
                 device_count = pynvml.nvmlDeviceGetCount()
-                logger.debug(f"NVIDIA devices found: {device_count}")
+                logger.debug(f"BRUH NVIDIA devices found: {device_count}")
                 for i in range(device_count):
                     handle = pynvml.nvmlDeviceGetHandleByIndex(i)
                     name = pynvml.nvmlDeviceGetName(handle)
-                    logger.debug(f"Device {i}: {name}")
+                    logger.debug(f"BRUH Device {i}: {name}")
             except Exception as nvml_error:
                 logger.error(f"Failed to query NVIDIA devices: {nvml_error}")
             raise RuntimeError(f"Failed to initialize OpenGL context: {e}")
@@ -112,11 +112,11 @@ class CustomDepthflowScene(DepthScene):
             "state": state,
             "effects": effects
         }
-        logger.debug(f"Initializing DepthScene with kwargs: {scene_kwargs}")
+        logger.debug(f"BRUH Initializing DepthScene with kwargs: {scene_kwargs}")
         
         try:
             super().__init__(**scene_kwargs)
-            logger.debug("DepthScene initialized successfully")
+            logger.debug("BRUH  DepthScene initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize DepthScene: {e}")
             logger.exception("Full traceback:")
@@ -353,11 +353,11 @@ class Depthflow:
         tiling_mode,
         effects=None,
     ):
-        logger.debug("Starting apply_depthflow")
-        logger.debug(f"Input parameters: fps={input_fps}, frames={num_frames}, quality={quality}")
+        logger.debug("BRUH  Starting apply_depthflow")
+        logger.debug(f"BRUH Input parameters: fps={input_fps}, frames={num_frames}, quality={quality}")
         
         state = {"invert": invert, "tiling_mode": tiling_mode}
-        logger.debug(f"Creating scene with state: {state}")
+        logger.debug(f"BRUH Creating scene with state: {state}")
         
         try:
             scene = CustomDepthflowScene(
@@ -370,7 +370,7 @@ class Depthflow:
                 animation_speed=animation_speed,
                 backend="headless"
             )
-            logger.debug("Scene created successfully")
+            logger.debug("BRUH  Scene created successfully")
         except Exception as e:
             logger.error(f"Failed to create scene: {e}")
             logger.exception("Full traceback:")
